@@ -12,7 +12,7 @@ import SwiftData
 struct InstAgendaOfficialApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            Event.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -23,10 +23,38 @@ struct InstAgendaOfficialApp: App {
         }
     }()
 
+    // Extract ModelContext from the shared ModelContainer
+    var viewModel: EventViewModel
+
+    init() {
+        // Get the model context from the model container
+        let modelContext = sharedModelContainer.mainContext
+        self.viewModel = EventViewModel(context: modelContext)
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            TabView {
+                // Event Page
+                EventPage(viewModel: viewModel)
+                    .tabItem {
+                        Label("Events", systemImage: "calendar")
+                    }
+                
+                // Calendar Page
+                CalendarPageView()
+                    .tabItem {
+                        Label("Calendar", systemImage: "calendar.circle")
+                    }
+                
+                // Settings Page
+                SettingsView()
+                    .tabItem {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+            }
+            .accentColor(.blue) // Change the tab bar color if needed
+            .modelContainer(sharedModelContainer)
         }
-        .modelContainer(sharedModelContainer)
     }
 }
