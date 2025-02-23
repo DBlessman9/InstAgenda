@@ -7,19 +7,21 @@ class Event: ObservableObject {
     @Attribute(.unique) var id: UUID
     var name: String
     var startDate: Date
-    var endDate: Date
+    var endDate: Date?  // Make endDate optional
     var startTime: Date
     var endTime: Date
     var location: String
     var notes: String
     private var eventTypeRaw: String  // Store as String for SwiftData compatibility
-    
+    var recurrence: [String]?  // Make recurrence optional
+    var travelTime: TimeInterval?  // New property to store travel time in seconds
+
     var eventType: EventType {
         get { EventType(rawValue: eventTypeRaw) ?? .other }
         set { eventTypeRaw = newValue.rawValue }
     }
 
-    init(id: UUID = UUID(), name: String, startDate: Date, endDate: Date, startTime: Date, endTime: Date, location: String, notes: String, eventType: EventType) {
+    init(id: UUID = UUID(), name: String, startDate: Date, endDate: Date? = nil, startTime: Date, endTime: Date, location: String, notes: String, recurrence: [String]? = nil, eventType: EventType, travelTime: TimeInterval? = nil) {
         self.id = id
         self.name = name
         self.startDate = startDate
@@ -28,7 +30,9 @@ class Event: ObservableObject {
         self.endTime = endTime
         self.location = location
         self.notes = notes
-        self.eventTypeRaw = eventType.rawValue  // Store raw value
+        self.eventTypeRaw = eventType.rawValue
+        self.recurrence = recurrence
+        self.travelTime = travelTime
     }
 }
 
@@ -87,17 +91,31 @@ class EventViewModel: ObservableObject {
 
 struct AddEventView: View {
     @Environment(\.dismiss) var dismiss
-    @Environment(\.modelContext) private var modelContext  // Use SwiftData context
-    @ObservedObject var viewModel: EventViewModel  // Add this
+    @Environment(\.modelContext) private var modelContext
+    @ObservedObject var viewModel: EventViewModel
     
+    
+
     @State private var name = ""
     @State private var location = ""
     @State private var notes = ""
     @State private var selectedStartDate = Date()
-    @State private var selectedEndDate = Date()
+    @State private var selectedEndDate: Date? = nil
     @State private var selectedStartTime = Date()
-    @State private var selectedEndTime = Date()
-    @State private var eventType: EventType = .other  // Use enum instead of String
+    @State private var selectedEndTime: Date? = nil
+    @State private var eventType: EventType = .other
+    @State private var selectedDays: [String] = []
+    @State private var isRecurring: Bool = false
+    
+    @State private var selectedTravelTime: TimeInterval? = nil
+    
+    @State private var showEndDatePicker = false
+    @State private var showEndTimePicker = false
+    
+    let weekdays = Calendar.current.weekdaySymbols
+    
+    let travelTimeOptions: [TimeInterval] = [5 * 60, 10 * 60, 15 * 60, 20 * 60, 30 * 60, 45 * 60, 60 * 60, 120 * 60]
+    let travelTimeLabels = ["5 minutes", "10 minutes", "15 minutes", "20 minutes", "30 minutes", "45 minutes", "1 hour", "2 hours"]
 
     var body: some View {
         NavigationView {
@@ -105,19 +123,68 @@ struct AddEventView: View {
                 TextField("Event Name", text: $name)
                 TextField("Location", text: $location)
                 TextField("Notes", text: $notes)
-
+                
                 DatePicker("Start Date", selection: $selectedStartDate, in: Date()..., displayedComponents: .date)
-                DatePicker("End Date", selection: $selectedEndDate, in: selectedEndDate..., displayedComponents: .date)
+
                 
                 DatePicker("Start Time", selection: $selectedStartTime, displayedComponents: .hourAndMinute)
-                DatePicker("End Time", selection: $selectedEndTime, in: selectedStartTime..., displayedComponents: .hourAndMinute)
 
+                
                 Picker("Event Type", selection: $eventType) {
                     ForEach(EventType.allCases, id: \.self) { type in
                         Text(type.rawValue).tag(type)
                     }
                 }
                 .pickerStyle(.menu)
+                
+                Picker("Travel Time", selection: $selectedTravelTime) {
+                                    ForEach(0..<travelTimeOptions.count, id: \.self) { index in
+                                        Text(travelTimeLabels[index]).tag(travelTimeOptions[index] as TimeInterval?)
+                                    }
+                                }
+
+                Toggle("Is Recurring", isOn: $isRecurring)
+                if isRecurring {
+                    Section(header: Text("Select Days")) {
+                        ForEach(weekdays, id: \.self) { day in
+                            MultipleSelectionRow(day: day, isSelected: selectedDays.contains(day)) {
+                                if selectedDays.contains(day) {
+                                    selectedDays.removeAll { $0 == day }
+                                } else {
+                                    selectedDays.append(day)
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Example for the End Date toggle in AddEventView
+                Toggle("Add End Date", isOn: Binding(
+                    get: { selectedEndDate != nil },
+                    set: { newValue in
+                        if newValue {
+                            selectedEndDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedStartDate)
+                        } else {
+                            selectedEndDate = nil
+                        }
+                        showEndDatePicker = newValue
+                    }
+                ))
+
+
+                Toggle("Add End Time", isOn: Binding(
+                    get: { selectedEndTime != nil },
+                    set: { newValue in
+                        if newValue {
+                            // Set a default end time when toggled on
+                            selectedEndTime = Calendar.current.date(byAdding: .hour, value: 1, to: selectedStartTime)
+                        } else {
+                            selectedEndTime = nil  // Set to nil when toggled off
+                        }
+                        showEndTimePicker = newValue
+                    }
+                ))
+
             }
             .navigationTitle("Add Event")
             .toolbar {
@@ -131,14 +198,16 @@ struct AddEventView: View {
                         let newEvent = Event(
                             name: name,
                             startDate: selectedStartDate,
-                            endDate: selectedEndDate,
+                            endDate: selectedEndDate ?? selectedStartDate,
                             startTime: selectedStartTime,
-                            endTime: selectedEndTime,
+                            endTime: selectedEndTime ?? selectedStartTime,
                             location: location,
                             notes: notes,
-                            eventType: eventType
+                            recurrence: isRecurring ? selectedDays : nil,
+                            eventType: eventType,
+                            travelTime: selectedTravelTime
                         )
-                        viewModel.addEvent(newEvent)  // Use ViewModel to save & refresh
+                        viewModel.addEvent(newEvent)
                         dismiss()
                         viewModel.fetchEvents()
                     }
@@ -149,24 +218,136 @@ struct AddEventView: View {
     }
 }
 
+
+
+
+
+
+// Helper view for multiple selection of days
+struct MultipleSelectionRow: View {
+    var day: String
+    var isSelected: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(day)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.blue)
+                } else {
+                    Image(systemName: "circle")
+                }
+            }
+        }
+        .foregroundColor(.primary)
+    }
+}
+
+
+import SwiftUI
+
 struct EditEventView: View {
     @Environment(\.dismiss) var dismiss
-    @Environment(\.modelContext) private var modelContext  // Use SwiftData context
-    @Binding var event: Event  // Use binding to modify the event
+    @Environment(\.modelContext) private var modelContext
+    @Binding var event: Event
+
+    @State private var name = ""
+    @State private var location = ""
+    @State private var notes = ""
+    @State private var selectedStartDate: Date
+    @State private var selectedEndDate: Date?
+    @State private var selectedStartTime: Date
+    @State private var selectedEndTime: Date?
+    @State private var eventType: EventType
+    @State private var selectedDays: [String] = []
+    @State private var isRecurring: Bool = false
+    @State private var travelTime: TimeInterval?  // New state variable for travel time
+
+    let weekdays = Calendar.current.weekdaySymbols
+    let travelTimeOptions: [TimeInterval] = [300, 600, 900, 1200, 1800, 2700, 3600] // 5, 10, 15, 20, 30, 45, 60 minutes in seconds
+
+    init(event: Binding<Event>) {
+        self._event = event
+        _name = State(initialValue: event.wrappedValue.name)
+        _location = State(initialValue: event.wrappedValue.location)
+        _notes = State(initialValue: event.wrappedValue.notes)
+        _selectedStartDate = State(initialValue: event.wrappedValue.startDate)
+        _selectedEndDate = State(initialValue: event.wrappedValue.endDate)
+        _selectedStartTime = State(initialValue: event.wrappedValue.startTime)
+        _selectedEndTime = State(initialValue: event.wrappedValue.endTime)
+        _eventType = State(initialValue: event.wrappedValue.eventType)
+        _selectedDays = State(initialValue: event.wrappedValue.recurrence ?? [])
+        _isRecurring = State(initialValue: event.wrappedValue.recurrence != nil)
+        _travelTime = State(initialValue: event.wrappedValue.travelTime) // Initialize with event's travelTime
+    }
 
     var body: some View {
         NavigationView {
             Form {
-                TextField("Event Name", text: $event.name)
-                TextField("Location", text: $event.location)
-                TextField("Notes", text: $event.notes)
+                TextField("Event Name", text: $name)
+                TextField("Location", text: $location)
+                TextField("Notes", text: $notes)
 
-                DatePicker("Start Date", selection: $event.startDate, displayedComponents: .date)
-                DatePicker("End Date", selection: $event.endDate, in: event.startDate..., displayedComponents: .date)
+                DatePicker("Start Date", selection: $selectedStartDate, displayedComponents: .date)
+                DatePicker("Start Time", selection: $selectedStartTime, displayedComponents: .hourAndMinute)
+
+                Picker("Event Type", selection: $eventType) {
+                    ForEach(EventType.allCases, id: \.self) { type in
+                        Text(type.rawValue).tag(type)
+                    }
+                }
+                .pickerStyle(.menu)
                 
-                DatePicker("Start Time", selection: $event.startTime, displayedComponents: .hourAndMinute)
+                // Travel Time Picker
+                Picker("Travel Time", selection: $travelTime) {
+                    ForEach(travelTimeOptions, id: \.self) { time in
+                        Text(timeFormatted(time)).tag(time as TimeInterval?)
+                    }
+                }
+                .pickerStyle(MenuPickerStyle())
 
-                DatePicker("End Time", selection: $event.endTime, in: event.startTime..., displayedComponents: .hourAndMinute)
+                Toggle("Is Recurring", isOn: $isRecurring)
+                if isRecurring {
+                    Section(header: Text("Select Days")) {
+                        ForEach(weekdays, id: \.self) { day in
+                            MultipleSelectionRow(day: day, isSelected: selectedDays.contains(day)) {
+                                if selectedDays.contains(day) {
+                                    selectedDays.removeAll { $0 == day }
+                                } else {
+                                    selectedDays.append(day)
+                                }
+                            }
+                        }
+                    }
+                }
+
+               
+                
+                Toggle("Add End Date", isOn: Binding(
+                    get: { selectedEndDate != nil },
+                    set: { newValue in
+                        if newValue {
+                            selectedEndDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedStartDate)
+                        } else {
+                            selectedEndDate = nil
+                        }
+                    }
+                ))
+
+                Toggle("Add End Time", isOn: Binding(
+                    get: { selectedEndTime != nil },
+                    set: { newValue in
+                        if newValue {
+                            selectedEndTime = Calendar.current.date(byAdding: .hour, value: 1, to: selectedStartTime)
+                        } else {
+                            selectedEndTime = nil
+                        }
+                    }
+                ))
+
             }
             .navigationTitle("Edit Event")
             .toolbar {
@@ -177,19 +358,39 @@ struct EditEventView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
+                        // Save the modified event
+                        event.name = name
+                        event.location = location
+                        event.notes = notes
+                        event.startDate = selectedStartDate
+                        event.endDate = selectedEndDate
+                        event.startTime = selectedStartTime
+                        event.endTime = selectedEndTime ?? selectedStartTime
+                        event.eventType = eventType
+                        event.recurrence = isRecurring ? selectedDays : nil
+                        event.travelTime = travelTime  // Save the selected travel time
+
                         do {
-                            try modelContext.save()  // Save with SwiftData
+                            try modelContext.save()
                             dismiss()
                         } catch {
                             print("Failed to save event: \(error.localizedDescription)")
                         }
                     }
-                    .disabled(event.name.isEmpty) // Disable save if name is empty
+                    .disabled(name.isEmpty)
                 }
             }
         }
     }
+
+    // Helper function to format time in minutes and seconds
+    private func timeFormatted(_ time: TimeInterval) -> String {
+        let minutes = Int(time) / 60
+        let seconds = Int(time) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
 }
+
 
 struct EventDetailView: View {
     @ObservedObject var viewModel: EventViewModel
@@ -205,6 +406,7 @@ struct EventDetailView: View {
                 .font(.largeTitle)
                 .bold()
                 .padding(.bottom, 20)
+            
             HStack {
                 Text("Location:")
                     .font(.headline)
@@ -222,9 +424,17 @@ struct EventDetailView: View {
             HStack {
                 Text("End Date:")
                     .font(.headline)
-                Text("\(event.endDate, style: .date)")
-                    .font(.body)
+                
+                if let endDate = event.endDate {
+                    Text("\(endDate, style: .date)")
+                        .font(.body)
+                } else {
+                    Text("No end date")
+                        .font(.body)
+                        .foregroundColor(.gray)
+                }
             }
+
             
             HStack {
                 Text("Start Time:")
@@ -247,6 +457,14 @@ struct EventDetailView: View {
             Text("\(event.notes)")
                 .font(.body)
             
+            // Add a check for recurrence here
+            if let recurrence = event.recurrence {
+                Text("Recurs every \(recurrence)")
+                    .font(.body)
+                    .padding(.top, 10)
+                    .foregroundColor(.gray)
+            }
+
             Spacer()
         }
         .padding()
@@ -280,6 +498,7 @@ struct EventDetailView: View {
     }
 }
 
+
 struct EventPage: View {
     @StateObject var viewModel: EventViewModel  // Use @ObservedObject since it's passed in
     
@@ -291,28 +510,30 @@ struct EventPage: View {
     var body: some View {
         NavigationStack {
             VStack {
-                HStack {
-                    Image("AppCornerLogo")
-                        .resizable()
-                        .frame(width: 50, height: 50)
-                    Image("InstaWordGrad")
-                        .padding(.top, 22)
-        
+                VStack {
+                    HStack {
+                        Image("AppCornerLogo")
+                            .resizable()
+                            .frame(width: 50, height: 50)
+                        Image("InstaWordGrad")
+                            .padding(.top, 22)
+                        
+                    }
+                    .padding(.top, -20)
+                    .padding(.bottom, 10)
+                    .padding(.leading, -180)
+                    .overlay(
+                        Rectangle()
+                            .frame(width:1000 ,height: 1)
+                            .foregroundColor(.black)
+                            .padding(.top, 50),
+                        alignment: .bottom
+                        
+                    )
                 }
-                .padding(.top, 20)
-                .padding(.bottom, 10)
-                .padding(.leading, -180)
-                .overlay(
-                    Rectangle()
-                        .frame(width:1000 ,height: 1)
-                        .foregroundColor(.black)
-                        .padding(.top, 50),
-                    alignment: .bottom
-                    
-                )
                 
           
-
+Spacer()
                 
   
                 ScrollView {
@@ -324,7 +545,7 @@ struct EventPage: View {
                                 Image(systemName: "plus")
                                     .resizable()
                                     .frame(width: 30, height: 30)
-                                    .foregroundColor(.gradientTop)
+                                    .foregroundColor(.gradientMid)
                                     .padding(.bottom)
                                     .padding(.leading)
                             }
@@ -335,7 +556,7 @@ struct EventPage: View {
                                 .padding(.bottom, 10)
                             Spacer()
                         }
-                        .padding(.top, 90)
+                        .padding(.top, 80)
                         .padding(.bottom, 10)
                         .sheet(isPresented: $showingAddEvent) {
                             
@@ -487,6 +708,7 @@ struct EventPage: View {
                 
             }
         }
+        .navigationBarHidden(false)
         .navigationBarBackButtonHidden(true)
     }
 }

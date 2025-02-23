@@ -8,7 +8,7 @@ import SwiftUI
 import SwiftData
 
 struct CalendarView: View {
-    @ObservedObject var viewModel: EventViewModel
+    @StateObject var viewModel: EventViewModel
     let calendar = Calendar.current
     let eventTypes: [EventType: Color] = [
         .health: .red,
@@ -19,8 +19,9 @@ struct CalendarView: View {
         .other: .gray
     ]
     
+    @State private var showingAddEvent = false
     @State private var currentDate = Date()
-    
+
     var formattedYear: String {
         let year = calendar.component(.year, from: currentDate)
         let yearFormatter = NumberFormatter()
@@ -29,11 +30,27 @@ struct CalendarView: View {
         return yearFormatter.string(from: NSNumber(value: year)) ?? "\(year)"
     }
     
+    
     func eventsForDay(_ day: Date) -> [Event] {
-        return viewModel.events.filter {
-            calendar.isDate($0.startDate, inSameDayAs: day)
+        let calendar = Calendar.current
+        
+        return viewModel.events.filter { event in
+            if let recurrence = event.recurrence {
+                // If the event is recurring, check if the current day matches the recurrence day
+                let dayOfWeek = calendar.component(.weekday, from: day) // Get the weekday number (1=Sunday, 2=Monday, etc.)
+                
+                // Check if the current date is greater than or equal to the event's start date
+                let isAfterStartDate = calendar.compare(day, to: event.startDate, toGranularity: .day) != .orderedAscending
+
+                // Check if the recurrence matches the weekday (by checking if the recurrence is in the weekdaySymbols array)
+                return calendar.weekdaySymbols.contains(recurrence) && isAfterStartDate
+            } else {
+                // If the event is not recurring, check the exact day
+                return calendar.isDate(event.startDate, inSameDayAs: day)
+            }
         }
     }
+
     
     func generateCalendar() -> [Date] {
         let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: currentDate))!
@@ -55,6 +72,32 @@ struct CalendarView: View {
     var body: some View {
         NavigationView {
             VStack {
+                
+                Button(action: {
+                    showingAddEvent.toggle()
+                }) {
+                    HStack {
+                        Image(systemName: "plus")
+                            .resizable()
+                            .frame(width: 30, height: 30)
+                            .foregroundColor(.gradientMid)
+                            .padding(.bottom)
+                            .padding(.leading)
+                    }
+                    Text("Add Event")
+                        .foregroundStyle(Color.gradientMid)
+                        .font(.title)
+                        .padding(5)
+                        .padding(.bottom, 10)
+                    Spacer()
+                }
+                .padding(.top, 10)
+                .sheet(isPresented: $showingAddEvent) {
+                    
+                    AddEventView(viewModel: viewModel)
+                    
+                }
+                
                 HStack {
                     Button(action: {
                         changeMonth(by: -1)
@@ -95,7 +138,7 @@ struct CalendarView: View {
                                     if date != Date.distantPast {
                                         let day = calendar.component(.day, from: date)
                                         
-                                        NavigationLink(destination: DayEventsView(date: date, events: eventsForDay(date))) {
+                                        NavigationLink(destination: DayEventsView(viewModel: viewModel, date: date, events: eventsForDay(date))) {
                                             Text("\(day)")
                                                 .font(.headline)
                                                 .frame(width: 40, height: 40, alignment: .center)
@@ -130,44 +173,69 @@ struct CalendarView: View {
         }
     }
 }
-// A new view to display events for a selected day
+
 struct DayEventsView: View {
+    @ObservedObject var viewModel: EventViewModel
     var date: Date
     var events: [Event]
-    
+    @State private var showingAddEvent = false
     let calendar = Calendar.current
     
     var body: some View {
-        VStack {
-            // Format the date to display as "Day Month Year"
-            let day = calendar.component(.day, from: date)
-            let month = calendar.component(.month, from: date)
-            let year = calendar.component(.year, from: date)
-            
-            // Format the year to display without commas
-            let formattedYear = String(format: "%d", year)
-            
-            Text("Events for \(month)/\(day)/\(formattedYear)")
-                .font(.title)
-                .padding()
-            
-            List(events) { event in
-                VStack(alignment: .leading) {
-                    Text(event.name)
-                        .font(.headline)
-                    Text(event.location)
-                        .font(.subheadline)
-                    Text(event.notes)
-                        .font(.body)
-                        .foregroundColor(.gray)
+        NavigationStack {
+            VStack {
+                let day = calendar.component(.day, from: date)
+                let month = calendar.component(.month, from: date)
+                let year = calendar.component(.year, from: date)
+                let formattedYear = String(format: "%d", year)
+                
+                Text("Events for \(month)/\(day)/\(formattedYear)")
+                    .font(.title)
+                    .padding()
+                
+                Button(action: {
+                    showingAddEvent.toggle()
+                }) {
+                    HStack {
+                        Image(systemName: "plus")
+                            .resizable()
+                            .frame(width: 30, height: 30)
+                            .foregroundColor(.gradientMid)
+                            .padding(.bottom)
+                            .padding(.leading)
+                    }
+                    Text("Add Event")
+                        .foregroundStyle(Color.gradientMid)
+                        .font(.title)
+                        .padding(5)
+                        .padding(.bottom, 10)
+                    Spacer()
                 }
-                .padding()
+                .padding(.top, 10)
+                .sheet(isPresented: $showingAddEvent) {
+                    AddEventView(viewModel: viewModel)
+                }
+                
+                List(events) { event in
+                    VStack(alignment: .leading) {
+                        // NavigationLink for each event to navigate to EventDetailView
+                        NavigationLink(destination: EventDetailView(viewModel: viewModel, event: event)) {
+                            Text(event.name)
+                                .font(.headline)
+                            Text(event.location)
+                                .font(.subheadline)
+                        }
+                        .padding()
+                    }
+                }
+                .listStyle(PlainListStyle())
             }
-            .listStyle(PlainListStyle())
+            .padding()
         }
-        .padding()
     }
 }
+
+
 
 // Ensure the EventViewModel is defined to accept context or data.
 class CalendarViewModel: ObservableObject {
@@ -207,7 +275,7 @@ struct CalendarPageView: View {
                         Rectangle()
                             .frame(width:1000 ,height: 1)
                             .foregroundColor(.black)
-                            .padding(.top, 50),
+                            .padding(.top, 52),
                         alignment: .bottom
                         
                     )
