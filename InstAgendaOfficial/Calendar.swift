@@ -36,16 +36,14 @@ struct CalendarView: View {
         
         return viewModel.events.filter { event in
             if let recurrence = event.recurrence {
-                // If the event is recurring, check if the current day matches the recurrence day
-                let dayOfWeek = calendar.component(.weekday, from: day) // Get the weekday number (1=Sunday, 2=Monday, etc.)
+               
+                let dayOfWeek = calendar.component(.weekday, from: day)
                 
-                // Check if the current date is greater than or equal to the event's start date
                 let isAfterStartDate = calendar.compare(day, to: event.startDate, toGranularity: .day) != .orderedAscending
 
                 // Check if the recurrence matches the weekday (by checking if the recurrence is in the weekdaySymbols array)
                 return calendar.weekdaySymbols.contains(recurrence) && isAfterStartDate
             } else {
-                // If the event is not recurring, check the exact day
                 return calendar.isDate(event.startDate, inSameDayAs: day)
             }
         }

@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import SwiftData
 
 extension UIImage {
     class func fromLayer(_ layer: CALayer) -> UIImage {
@@ -29,3 +30,22 @@ extension DateFormatter {
         return formatter
     }()
 }
+
+protocol BackingData {
+    associatedtype T
+    var value: T { get }
+    
+    init(value: T)
+}
+
+struct AlarmBackingData: BackingData {
+    var value: AppAlarm
+    
+    init(value: AppAlarm) {
+        self.value = value
+    }
+}
+
+
+
+

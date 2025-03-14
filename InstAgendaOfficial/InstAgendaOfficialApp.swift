@@ -62,13 +62,13 @@ struct CustomTabView: View {
                 EventPage(viewModel: viewModel)
             } else if selectedTab == 1 {
                 CalendarPageView()
+            } else  if selectedTab == 2 {
+                AlarmView()
             } else {
                 SettingsView()
             }
 
-            // Custom Tab Bar
             HStack {
-                // Event Tab
                 Button(action: {
                     selectedTab = 0
                 }) {
@@ -77,7 +77,7 @@ struct CustomTabView: View {
 
                 Spacer()
 
-                // Calendar Tab
+             
                 Button(action: {
                     selectedTab = 1
                 }) {
@@ -86,11 +86,18 @@ struct CustomTabView: View {
 
                 Spacer()
 
-                // Settings Tab
                 Button(action: {
                     selectedTab = 2
                 }) {
-                    TabBarItem(icon: "gearshape.fill", label: "Settings", isSelected: selectedTab == 2)
+                    TabBarItem(icon: "alarm.fill", label: "Alarm", isSelected: selectedTab == 2)
+                }
+                
+                Spacer()
+                // Settings Tab
+                Button(action: {
+                    selectedTab = 3
+                }) {
+                    TabBarItem(icon: "gearshape.fill", label: "Settings", isSelected: selectedTab == 3)
                 }
             }
             .frame(maxWidth: .infinity)
