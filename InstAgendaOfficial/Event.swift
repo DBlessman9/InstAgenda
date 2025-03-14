@@ -12,9 +12,9 @@ class Event: ObservableObject {
     var endTime: Date
     var location: String
     var notes: String
-    private var eventTypeRaw: String  // Store as String for SwiftData compatibility
-    var recurrence: [String]?  // Make recurrence optional
-    var travelTime: TimeInterval?  // New property to store travel time in seconds
+    private var eventTypeRaw: String
+    var recurrence: [String]?
+    var travelTime: TimeInterval?
 
     var eventType: EventType {
         get { EventType(rawValue: eventTypeRaw) ?? .other }
@@ -508,8 +508,6 @@ struct EventPage: View {
     let calendar = Calendar.current
     
     var body: some View {
-        NavigationStack {
-            VStack {
                 VStack {
                     HStack {
                         Image("AppCornerLogo")
@@ -519,22 +517,22 @@ struct EventPage: View {
                             .padding(.top, 22)
                         
                     }
-                    .padding(.top, -20)
+                    .padding(.top, -18)
                     .padding(.bottom, 10)
                     .padding(.leading, -180)
                     .overlay(
                         Rectangle()
                             .frame(width:1000 ,height: 1)
                             .foregroundColor(.black)
-                            .padding(.top, 50),
+                            .padding(.top, 52),
                         alignment: .bottom
                         
                     )
                 }
                 
           
-Spacer()
-                
+             Spacer()
+                NavigationStack {
   
                 ScrollView {
                     VStack {
@@ -706,7 +704,7 @@ Spacer()
                 }
                 
                 
-            }
+            
         }
         .navigationBarHidden(false)
         .navigationBarBackButtonHidden(true)
